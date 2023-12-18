@@ -16,6 +16,9 @@ var emojiDisabled = null;
 
 /* Observes the page for any new images in the shoutbox or on the bitbucket page */
 function handleMouseOver(event) {
+  if (document.getElementById('emojiQuickAddButton')) {
+    return ;
+  }
   const img = event.target;
   const plusButton = document.createElement('button');
   plusButton.id = 'emojiQuickAddButton';
@@ -117,6 +120,12 @@ function loadDefaultSettings() {
 
   if (!('load_default' in emojiSettings)) {
     emojiSettings.load_default = true;
+  }
+  if (!('default_width' in emojiSettings)) {
+    emojiSettings.default_width = 18;
+  }
+  if (!('default_height' in emojiSettings)) {
+    emojiSettings.default_height = 18;
   }
 }
 loadDefaultSettings();
@@ -233,6 +242,83 @@ function extractUploadResult(htmlText) {
 
 }
 
+/* https://stackoverflow.com/a/18320662 */
+function resample_single(canvas, width, height, resize_canvas) {
+    var width_source = canvas.width;
+    var height_source = canvas.height;
+    width = Math.round(width);
+    height = Math.round(height);
+
+    var ratio_w = width_source / width;
+    var ratio_h = height_source / height;
+    var ratio_w_half = Math.ceil(ratio_w / 2);
+    var ratio_h_half = Math.ceil(ratio_h / 2);
+
+    var ctx = canvas.getContext("2d");
+    var img = ctx.getImageData(0, 0, width_source, height_source);
+    var img2 = ctx.createImageData(width, height);
+    var data = img.data;
+    var data2 = img2.data;
+
+    for (var j = 0; j < height; j++) {
+        for (var i = 0; i < width; i++) {
+            var x2 = (i + j * width) * 4;
+            var weight = 0;
+            var weights = 0;
+            var weights_alpha = 0;
+            var gx_r = 0;
+            var gx_g = 0;
+            var gx_b = 0;
+            var gx_a = 0;
+            var center_y = (j + 0.5) * ratio_h;
+            var yy_start = Math.floor(j * ratio_h);
+            var yy_stop = Math.ceil((j + 1) * ratio_h);
+            for (var yy = yy_start; yy < yy_stop; yy++) {
+                var dy = Math.abs(center_y - (yy + 0.5)) / ratio_h_half;
+                var center_x = (i + 0.5) * ratio_w;
+                var w0 = dy * dy; //pre-calc part of w
+                var xx_start = Math.floor(i * ratio_w);
+                var xx_stop = Math.ceil((i + 1) * ratio_w);
+                for (var xx = xx_start; xx < xx_stop; xx++) {
+                    var dx = Math.abs(center_x - (xx + 0.5)) / ratio_w_half;
+                    var w = Math.sqrt(w0 + dx * dx);
+                    if (w >= 1) {
+                        //pixel too far
+                        continue;
+                    }
+                    //hermite filter
+                    weight = 2 * w * w * w - 3 * w * w + 1;
+                    var pos_x = 4 * (xx + yy * width_source);
+                    //alpha
+                    gx_a += weight * data[pos_x + 3];
+                    weights_alpha += weight;
+                    //colors
+                    if (data[pos_x + 3] < 255)
+                        weight = weight * data[pos_x + 3] / 250;
+                    gx_r += weight * data[pos_x];
+                    gx_g += weight * data[pos_x + 1];
+                    gx_b += weight * data[pos_x + 2];
+                    weights += weight;
+                }
+            }
+            data2[x2] = gx_r / weights;
+            data2[x2 + 1] = gx_g / weights;
+            data2[x2 + 2] = gx_b / weights;
+            data2[x2 + 3] = gx_a / weights_alpha;
+        }
+    }
+    //clear and resize canvas
+    if (resize_canvas === true) {
+        canvas.width = width;
+        canvas.height = height;
+    } else {
+        ctx.clearRect(0, 0, width_source, height_source);
+    }
+
+    //draw
+    ctx.putImageData(img2, 0, 0);
+}
+
 /* resizes image to given size */
 function resizeImage(file, x, y, originalFilename, emoji_name) {
     return new Promise((resolve, reject) => {
@@ -242,27 +328,60 @@ function resizeImage(file, x, y, originalFilename, emoji_name) {
             return;
         }*/
 
+      if (file.type === 'image/gif') {
+            // Directly resolve with the original image blob for GIFs
+            resolve(file);
+            return;
+        }
+
         const img = new Image();
         img.onload = () => {
+          if (x == img.width && y == img.height) {
+            resolve(file);
+            return;
+          }
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
+          ctx.mozImageSmoothingEnabled = true;
+          ctx.webkitImageSmoothingEnabled = true;
+          ctx.msImageSmoothingEnabled = true;
+          ctx.imageSmoothingEnabled = true;
             /*canvas.width = x;
             canvas.height = y;
             ctx.drawImage(img, 0, 0, x, y);
             canvas.toBlob(resolve, 'image/jpeg');*/
 
-          // If x or y is negative, use the original image dimensions
-            canvas.width = x < 0 ? img.width : x;
-            canvas.height = y < 0 ? img.height : y;
+          // If x is negative, use the original image dimensions
+           /* canvas.width = x < 0 ? img.width : x;
+            if (x < 0) {
+              x = img.width;
+            }
+          // if y is negative, make the y proportional
+            if (y < 0) {
+              canvas.height = canvas.width * img.height / img.width;
+            }
 
             // Set a transparent background
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             // Draw the image with transparency
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            */
 
+          if (x < 0) {
+              x = img.width;
+            }
+          // if y is negative, make the y proportional
+            if (y < 0) {
+              y = img.height * x / img.width;
+            }
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.drawImage(img, 0, 0, img.width, img.height);
+          resample_single(canvas, x, y, true);
             // Convert the canvas to a blob with PNG format to preserve transparency
             canvas.toBlob(resolve, 'image/png');
+
         };
         img.onerror = reject;
         img.src = URL.createObjectURL(file);
@@ -270,12 +389,24 @@ function resizeImage(file, x, y, originalFilename, emoji_name) {
 }
 
 /* Changes a file extension to png */
-function changeImageExtension(filename) {
+/*function changeImageExtension(filename) {
   // Split the filename into its name and extension
   const parts = filename.split('.');
 
   // If there is an extension, replace it with 'png'; otherwise, add '.png' as the extension
   const newFilename = parts.length > 1 ? parts.slice(0, -1).join('.') + '.png' : filename + '.png';
+
+  return newFilename;
+}*/
+function changeImageExtension(filename) {
+  // Split the filename into its name and extension
+  const parts = filename.split('.');
+
+  // If there is an extension and it's not 'gif', replace it with 'png'; otherwise, keep the original extension
+  const newExtension = parts.length > 1 && parts[parts.length - 1].toLowerCase() !== 'gif' ? 'png' : parts[parts.length - 1];
+
+  // Replace the original extension with the new one
+  const newFilename = parts.slice(0, -1).join('.') + '.' + newExtension;
 
   return newFilename;
 }
@@ -302,10 +433,16 @@ function uploadImageFromRemote(url, x, y, emoji_name) {
   // Fetch the image and convert it to a Blob
   fetchImageAsBlob(url)
       .then(blob => {
+          if (blob.type === 'image/gif') {
+                // Directly call the uploadImage function with the original GIF blob
+                uploadImage({ files: [blob] }, x, y, emoji_name);
+                return;
+            }
+
           // Create a File object with the Blob
           let name = nameFromUrl(url);
           const newFilename = changeImageExtension(name);
-          const file = new File([blob], newFilename, { type: 'image/png' });
+          const file = new File([blob], emoji_name + '.png', { type: 'image/png' });
 
           // Now, call the uploadImage function with the file parameter
           uploadImage({ files: [file] }, x, y, emoji_name);
@@ -315,6 +452,31 @@ function uploadImageFromRemote(url, x, y, emoji_name) {
           result_p.innerText = `❌ Error fetching image: ${error}`;
           console.error('Error fetching image:', error);
       });
+}
+
+function getFileExtension(filename) {
+  let parts = filename.split('.');
+  if (parts.length == 1) {
+    return ('');
+  }
+  return (parts.pop().toLowerCase());
+}
+
+function getDesiredExtendion(filename) {
+  if (getFileExtension(filename) == 'gif') {
+    return ('gif');
+  }
+  return ('png');
+}
+
+function generateRandomString(n) {
+    let randomString           = '';
+    let characters       = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+
+    for ( let i = 0; i < n; i++ ) {
+      randomString += characters.charAt(Math.floor(Math.random()*characters.length));
+   }
+   return randomString;
 }
 
 /* Upload image from a file input */
@@ -329,7 +491,8 @@ function uploadImage(fileInput, x, y, emoji_name) {
         result_p.innerText = '❌ No file selected';
         return;
     }
-  const filename = changeImageExtension(file.name);
+
+  const filename = `${emoji_name}-${generateRandomString(5)}.${getDesiredExtendion(file.name)}`; //changeImageExtension(file.name);
   resizeImage(file, x, y, filename, emoji_name)
         .then(resizedBlob => {
             // Create a FormData object and append the resized file to it
@@ -446,11 +609,11 @@ function showUploadMenu(x, y, existingImage = null) {
   if (existingImage && urlGetName(existingImage.src)) {
     prefilled_name = urlGetName(existingImage.src);
   }
-  let prefilled_width = 18;
+  let prefilled_width = emojiSettings.default_width;
   if (existingImage) {
     prefilled_width = existingImage.width;
   }
-  let prefilled_height = 18;
+  let prefilled_height = emojiSettings.default_height;
   if (existingImage) {
     prefilled_height = existingImage.height;
   }
@@ -488,8 +651,8 @@ function showUploadMenu(x, y, existingImage = null) {
       </label>
       <br>
       <br>
-    <p>Note: reuploading a file under the same filename does NOT change it on MaM's servers. This is a MaM limitation.</p>
-    <p>Note: The emoji name will be visible to moderators and users in the shoutbox.</p>
+    <p>Note: Setting a negative height makes it proportional to the new width.</p>
+    <p>Note: The emoji and its name will be visible to moderators and users.</p>
     <p>Note: you can see your own uploads <a href="https://www.myanonamouse.net/bitbucket-upload.php">here</a></p>
   `;
 
@@ -614,6 +777,16 @@ function showSettingsMenu(x, y) {
           <input type="checkbox" id="load_default"> Load default MaM emojis
       </label>
       <br>
+      <label>
+          Default resize width:
+          <input type="number" id="default_width" value="${emojiSettings.default_width}">
+      </label>
+      <br>
+      <label>
+          Default resize height:
+          <input type="number" id="default_height" value="${emojiSettings.default_height}">
+      </label>
+      <br>
       <button id="emoji_reset_order_button">Reset emoji order</button>
       <br>
       <br>
@@ -629,16 +802,24 @@ function showSettingsMenu(x, y) {
   `;
   document.body.appendChild(floatingMenu);
 
-  // Set the checkbox state based on the 'load_default' value
   const loadDefaultCheckbox = document.getElementById('load_default');
   loadDefaultCheckbox.checked = emojiSettings.load_default;
-
-  // Add an event listener to update local storage when the checkbox is changed
   loadDefaultCheckbox.addEventListener('change', function() {
-    // Update the 'load_default' value in emojiSettings
     emojiSettings.load_default = this.checked;
+    localStorage.setItem('mam_emoji_settings', JSON.stringify(emojiSettings));
+  });
 
-    // Save the updated settings back to local storage
+  const default_widthInput = document.getElementById('default_width');
+  default_widthInput.value = emojiSettings.default_width;
+  default_widthInput.addEventListener('change', function() {
+    emojiSettings.default_width = this.value;
+    localStorage.setItem('mam_emoji_settings', JSON.stringify(emojiSettings));
+  });
+
+  const default_heightInput = document.getElementById('default_height');
+  default_heightInput.value = emojiSettings.default_height;
+  default_heightInput.addEventListener('change', function() {
+    emojiSettings.default_height = this.value;
     localStorage.setItem('mam_emoji_settings', JSON.stringify(emojiSettings));
   });
 
