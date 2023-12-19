@@ -3,12 +3,16 @@
 // @namespace   Violentmonkey Scripts
 // @match       https://www.myanonamouse.net/*
 // @grant       none
-// @version     1.0
-// @author      -
+// @version     1.4
+// @author      jack
 // @description 12/17/2023, 1:06:52 PM
+// @updateURL   https://github.com/trollogyadherent/mam_emoji_script/raw/master/mam-emojis.user.js
 // ==/UserScript==
 
-var emojiSettings = null;
+(function() {
+    //'use strict';
+
+    var emojiSettings = null;
 var emojis = null;
 var emojiOrder = null;
 var emojiDisabled = null;
@@ -93,25 +97,25 @@ observer.observe(targetNode, config);*/
 
 /* Loads variables from browsers localstorage (COOKIES?!) */
 function loadDefaultSettings() {
-  emojiSettings_entry = localStorage.getItem('mam_emoji_settings');
+  let emojiSettings_entry = localStorage.getItem('mam_emoji_settings');
   if (emojiSettings_entry) {
     emojiSettings = JSON.parse(emojiSettings_entry);
   } else {
     emojiSettings = {};
   }
-  emojis_entry = localStorage.getItem('mam_emojis');
+  let emojis_entry = localStorage.getItem('mam_emojis');
   if (emojis_entry) {
     emojis = JSON.parse(emojis_entry);
   } else {
     emojis = {};
   }
-  emojiOrder_entry = localStorage.getItem('mam_emoji_order');
+  let emojiOrder_entry = localStorage.getItem('mam_emoji_order');
   if (emojiOrder_entry) {
     emojiOrder = JSON.parse(emojiOrder_entry);
   } else {
     emojiOrder = [];
   }
-  emojiDisabled_entry = localStorage.getItem('mam_emoji_disabled');
+  let emojiDisabled_entry = localStorage.getItem('mam_emoji_disabled');
   if (emojiDisabled_entry) {
     emojiDisabled = JSON.parse(emojiDisabled_entry);
   } else {
@@ -143,14 +147,14 @@ function main() {
       //event.preventDefault();
 
       // Alert when the user presses the send button
-      console.log("Shout button pressed!");
+      //console.log("Shout button pressed!");
       let sb_text = document.getElementById('shbox_text').value;
       for (key in emojis) {
         let to_replace = ':' + key + ':';
         sb_text = sb_text.replaceAll(to_replace, `[img]${emojis[key]}?name=${key}&_=MaM_Emojis_by_jack[/img]`);
       }
       sb_text = document.getElementById('shbox_text').value = sb_text;
-      console.log(sb_text);
+      //console.log(sb_text);
       });
     }
 
@@ -511,7 +515,7 @@ function uploadImage(fileInput, x, y, emoji_name) {
                 return response.text(); // assuming the response is HTML
             })
             .then(html => {
-                console.log('HTML response:', html);
+                //console.log('HTML response:', html);
                 let result = extractUploadResult(html);
               let result_p = document.getElementById('upload_status');
               if (result.success) {
@@ -1278,7 +1282,7 @@ doDisplayOfSmilies = function() {
     img.addEventListener('dragstart', function (event) {
       /* This adds the index of the dragged img to some sort of drag context variable which is then used to calculate where to place the dropped element */
       event.dataTransfer.setData('text/plain', img.alt);
-      console.log(`Grabbed index ${index} (name ${img.alt})`);
+      //console.log(`Grabbed index ${index} (name ${img.alt})`);
       // Add opacity on drag
       img.style.opacity = '0.4';
       // Restore opacity after
@@ -1332,8 +1336,8 @@ doDisplayOfSmilies = function() {
       if (draggedIndex == -1) {
         return ;
       }
-      console.log(img.alt);
-      console.log(`dropped index ${draggedIndex} (${smiliesList[draggedIndex].value}) on index ${toIndex} (${smiliesList[toIndex].value})`);
+      //console.log(img.alt);
+      //console.log(`dropped index ${draggedIndex} (${smiliesList[draggedIndex].value}) on index ${toIndex} (${smiliesList[toIndex].value})`);
       // Move the dragged image to the left of the drop position
       if (draggedIndex < toIndex) {
         toIndex--;
@@ -1362,3 +1366,4 @@ doDisplayOfSmilies = function() {
     event.preventDefault();
   });
 };
+})();
